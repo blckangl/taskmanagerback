@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
@@ -15,19 +16,25 @@ namespace taskmanagerback.Controllers
 {
     [Route("api/auth")]
     [ApiController]
+    [Authorize]
+
     public class AuthController : ControllerBase
     {
         private IConfiguration _config;
+        private TaskManagerContext _context;
 
-        private List<User> users = new List<User>(new[] { new User() { UserId = 0, Login = "user", Password = "123" } });
-        public AuthController(IConfiguration config)
+        public AuthController(IConfiguration config,TaskManagerContext context)
         {
             _config = config;
+            _context = context;
         }
 
         [HttpPost("login")]
-        public IActionResult Login([FromBody]User user)
+        [AllowAnonymous]
+        public IActionResult Login([FromBody] User user)
         {
+            var postUser = user;
+
             if (Authentificate(user) != null)
             {
                 return new JsonResult(new { token = GenerateJWTToken(user), user = user });
@@ -37,9 +44,16 @@ namespace taskmanagerback.Controllers
         }
 
 
+        [HttpGet()]
+       public IActionResult getAllUsers()
+        {
+            return new JsonResult(_context.users);
+        }
         private User Authentificate(User cred)
         {
-           return users.FirstOrDefault(user => user.Login == cred.Login && user.Password == cred.Password);
+            var user = _context.users.FirstOrDefault(user => user.Login == cred.Login && user.Password == cred.Password);
+
+            return user;
         }
 
 
@@ -51,19 +65,21 @@ namespace taskmanagerback.Controllers
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
             var claims = new[]
             {
-                new Claim(JwtRegisteredClaimNames.Sub, userInfo.Login),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            };
-
-
-      
+new Claim(JwtRegisteredClaimNames.Sub, userInfo.Login),
+new Claim("fullName", userInfo.Login.ToString()),
+new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+};
             var token = new JwtSecurityToken(
             issuer: issuer,
+            audience: issuer,
             claims: claims,
             expires: DateTime.Now.AddMinutes(30),
             signingCredentials: credentials
             );
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
+
+
+
     }
 }

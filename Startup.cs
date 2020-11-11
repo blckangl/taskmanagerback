@@ -11,7 +11,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Logging;
 using Microsoft.IdentityModel.Tokens;
+using taskmanagerback.Models;
 
 namespace taskmanagerback
 {
@@ -28,29 +30,27 @@ namespace taskmanagerback
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllers();
+            services.AddDbContext<TaskManagerContext>();
             var issuer = Configuration.GetSection("Jwt")["Issuer"];
             var secretKey = Configuration.GetSection("Jwt")["SecretKey"];
 
-            services.AddAuthentication(option =>
-              {
-                  option.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                  option.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-
-              }).AddJwtBearer(options =>
-              {
-                  options.TokenValidationParameters = new TokenValidationParameters
-                  {
-                      ValidateIssuer = true,
-                      ValidateAudience = false,
-                      ValidateLifetime = false,
-                      ValidateIssuerSigningKey = true,
-                      ValidIssuer = issuer,
-                      ValidAudience = secretKey,
-                      IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration.GetSection("Jwt")["SecretKey"]))
-                  };
-              });
-
-            services.AddAuthorization();
+            services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+  .AddJwtBearer(options =>
+  {
+      options.RequireHttpsMetadata = false;
+      options.SaveToken = true;
+      options.TokenValidationParameters = new TokenValidationParameters
+      {
+          ValidateIssuer = true,
+          ValidateAudience = true,
+          ValidateLifetime = true,
+          ValidateIssuerSigningKey = true,
+          ValidIssuer = issuer,
+          ValidAudience = issuer,
+          IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+          ClockSkew = TimeSpan.Zero
+      };
+  });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -59,12 +59,14 @@ namespace taskmanagerback
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
+                IdentityModelEventSource.ShowPII = true;
+
             }
 
             app.UseRouting();
 
-            app.UseAuthorization();
             app.UseAuthentication();
+            app.UseAuthorization();
 
             app.UseEndpoints(endpoints =>
             {
